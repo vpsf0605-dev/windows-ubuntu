@@ -18,12 +18,13 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 360
     steps:
-      - name: START WINDOWS
+      - name: KHỞI ĐỘNG WINDOWS
         shell: powershell
         run: |
-          Write-Host "===== Hệ thống ZUNRDP Windows ====="
+          # Chạy ngầm, không hiển thị log
+          $null = Write-Host "===== Chuẩn bị Windows =====" -ForegroundColor Cyan
 
-      - name: CREATE WINDOWS USER
+      - name: TẠO USER WINDOWS
         shell: powershell
         run: |
           $Username="ADMINZUN"
@@ -34,50 +35,108 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member $Username
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username
 
-      - name: INSTALL & CONNECT TAILSCALE
+      - name: CÀI VÀ KẾT NỐI TAILSCALE WINDOWS
         shell: powershell
         env:
           TOKEN_1: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
           $token = $env:TOKEN_1
+          if (-not $token) { exit 1 }
+
           $msi="$env:TEMP\tailscale.msi"
-          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi
+          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi -UseBasicParsing
           Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
           Start-Sleep -Seconds 10
+
           $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
+          if (-Not (Test-Path $tsExe)) { exit 1 }
           & $tsExe up --authkey=$token --hostname=ZUNRDP --accept-routes --reset > $null 2>&1
           $ip = & $tsExe ip -4
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      - name: SEND INFO TO TELEGRAM
+      - name: HIỂN THỊ THÔNG TIN WINDOWS
         shell: powershell
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TAILSCALE_IP: ${{ env.TAILSCALE_IP }}
         run: |
-          $MachineID="ZUN-" + -join ((65..90) + (48..57) | Get-Random -Count 6 | % {[char]$_})
-          $msg = "MachineID: $MachineID`nIP: $env:TAILSCALE_IP`nUser: ADMINZUN`nPass: ZunRDP@123456"
-          $url="https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/sendMessage"
-          Invoke-RestMethod -Uri $url -Method Post -Body @{chat_id=$env:TELEGRAM_CHAT_ID; text=$msg} -ErrorAction SilentlyContinue
+          Write-Host "===============================" -ForegroundColor Cyan
+          Write-Host "IP   : $env:TAILSCALE_IP"
+          Write-Host "User : ADMINZUN"
+          Write-Host "Pass : ZunRDP@123456"
+          Write-Host "Port : 3389 (RDP)"
+          Write-Host "===============================" -ForegroundColor Cyan
 
-      - name: LISTEN TELEGRAM COMMANDS
+      - name: TREO MÁY WINDOWS
         shell: powershell
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          $MachineID="ZUN-" + -join ((65..90) + (48..57) | Get-Random -Count 6 | % {[char]$_})
-          while ($true) {
-              $updates = Invoke-RestMethod "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/getUpdates" -Method Get
-              foreach ($u in $updates.result) {
-                  if ($u.message.text -like "/kill_$MachineID") {
-                      Stop-Computer -Force
-                  } elseif ($u.message.text -eq "/list") {
-                      $msg="MachineID: $MachineID`nIP: $env:TAILSCALE_IP`nUser: ADMINZUN`nPass: ZunRDP@123456"
-                      $url="https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/sendMessage"
-                      Invoke-RestMethod -Uri $url -Method Post -Body @{chat_id=$env:TELEGRAM_CHAT_ID; text=$msg} -ErrorAction SilentlyContinue
-                  }
-              }
-              Start-Sleep -Seconds 10
-          }
+          while($true){ Start-Sleep -Seconds 60 }
+
+      - name: THOÁT TAILSCALE WINDOWS
+        if: always()
+        shell: powershell
+        run: |
+          $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
+          if (Test-Path $tsExe) { & $tsExe logout > $null 2>&1 }
+
+  setup-ubuntu:
+    if: ${{ github.event.inputs.machine_name == 'Ubuntu' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: KHỞI ĐỘNG UBUNTU
+        shell: bash
+        run: |
+          # Chạy ngầm
+          :
+
+      - name: TẠO USER UBUNTU
+        shell: bash
+        run: |
+          sudo useradd -m -s /bin/bash adminzun || true
+          echo "adminzun:ZunRDP@123456" | sudo chpasswd
+          sudo usermod -aG sudo adminzun
+
+      - name: CÀI XRDP (RDP SERVER) UBUNTU
+        shell: bash
+        run: |
+          sudo apt-get update -y -qq
+          sudo apt-get install -y xrdp -qq
+          sudo systemctl enable xrdp > /dev/null 2>&1
+          sudo systemctl start xrdp > /dev/null 2>&1
+          sudo ufw allow 3389/tcp > /dev/null 2>&1
+
+      - name: CÀI VÀ KẾT NỐI TAILSCALE UBUNTU
+        shell: bash
+        env:
+          TOKEN_1: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          TOKEN=$TOKEN_1
+          if [ -z "$TOKEN" ]; then exit 1; fi
+          sudo apt-get install -y curl gnupg lsb-release apt-transport-https -qq
+          DISTRO=$(lsb_release -cs)
+          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$DISTRO.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu $DISTRO main" | sudo tee /etc/apt/sources.list.d/tailscale.list > /dev/null
+          sudo apt-get update -y -qq
+          sudo apt-get install -y tailscale -qq
+          sudo tailscale up --authkey=$TOKEN --hostname=ZUNRDP --accept-routes --reset > /dev/null 2>&1
+          IP=$(tailscale ip -4)
+          echo "TAILSCALE_IP=$IP" >> $GITHUB_ENV
+
+      - name: HIỂN THỊ THÔNG TIN UBUNTU
+        shell: bash
+        run: |
+          echo "==============================="
+          echo "IP   : $TAILSCALE_IP"
+          echo "User : adminzun"
+          echo "Pass : ZunRDP@123456"
+          echo "Port : 3389 (RDP)"
+          echo "==============================="
+
+      - name: TREO MÁY UBUNTU
+        shell: bash
+        run: |
+          while true; do sleep 60; done
+
+      - name: THOÁT TAILSCALE UBUNTU
+        if: always()
+        shell: bash
+        run: |
+          sudo tailscale logout > /dev/null 2>&1
