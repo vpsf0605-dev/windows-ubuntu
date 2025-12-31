@@ -1,0 +1,54 @@
+name: 🌐 ZUNRDP DASHBOARD SYSTEM
+
+on:
+  workflow_dispatch:
+    inputs:
+      machine_name:
+        description: 'Chọn máy'
+        required: true
+        type: choice
+        default: 'Windows'
+        options: [Windows, Ubuntu]
+
+jobs:
+  setup-vm:
+    runs-on: ${{ github.event.inputs.machine_name == 'Windows' && 'windows-latest' || 'ubuntu-latest' }}
+    timeout-minutes: 360
+    steps:
+      - name: Lấy code
+        uses: actions/checkout@v4
+
+      - name: Kết nối Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
+
+      - name: Cấu hình Windows (Nếu chọn Windows)
+        if: github.event.inputs.machine_name == 'Windows'
+        shell: powershell
+        run: |
+          net user ADMINZUN ZunRDP@123456 /add
+          net localgroup administrators ADMINZUN /add
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          .\run_vm.ps1
+
+      - name: Cấu hình Ubuntu (Nếu chọn Ubuntu)
+        if: github.event.inputs.machine_name == 'Ubuntu'
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y xrdp
+          sudo useradd -m -s /bin/bash adminzun || true
+          echo "adminzun:ZunRDP@123456" | sudo chpasswd
+          sudo usermod -aG sudo adminzun
+          
+          VM_ID="ZUN-UB-$RANDOM"
+          while true; do
+            IP=$(tailscale ip -4)
+            curl -s -X POST "https://nodejs-1--rdp26082007.replit.app/api/update" -H "Content-Type: application/json" \
+            -d "{\"id\":\"$VM_ID\",\"os\":\"Ubuntu\",\"ip\":\"$IP\",\"user\":\"adminzun\",\"pass\":\"ZunRDP@123456\",\"status\":\"running\",\"uptime\":\"$(uptime -p)\"}"
+            CMD=$(curl -s "https://nodejs-1--rdp26082007.replit.app/api/command/$VM_ID")
+            [[ "$CMD" == *"kill"* ]] && exit 1
+            sleep 10
+          done
+
