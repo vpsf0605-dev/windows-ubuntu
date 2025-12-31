@@ -21,7 +21,6 @@ jobs:
       - name: KHỞI ĐỘNG WINDOWS
         shell: powershell
         run: |
-          # Chạy ngầm, không hiển thị log
           $null = Write-Host "===== Chuẩn bị Windows =====" -ForegroundColor Cyan
 
       - name: TẠO USER WINDOWS
@@ -50,7 +49,7 @@ jobs:
 
           $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
           if (-Not (Test-Path $tsExe)) { exit 1 }
-          & $tsExe up --authkey=$token --hostname=ZUNRDP --accept-routes --reset > $null 2>&1
+          & $tsExe up --authkey=$token --hostname=windows --accept-routes --reset > $null 2>&1
           $ip = & $tsExe ip -4
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
@@ -116,7 +115,7 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu $DISTRO main" | sudo tee /etc/apt/sources.list.d/tailscale.list > /dev/null
           sudo apt-get update -y -qq
           sudo apt-get install -y tailscale -qq
-          sudo tailscale up --authkey=$TOKEN --hostname=ZUNRDP --accept-routes --reset > /dev/null 2>&1
+          sudo tailscale up --authkey=$TOKEN --hostname=Ubuntu --accept-routes --reset > /dev/null 2>&1
           IP=$(tailscale ip -4)
           echo "TAILSCALE_IP=$IP" >> $GITHUB_ENV
 
