@@ -1,39 +1,39 @@
-name: 🌐 ZUNRDP DASHBOARD SYSTEM
+name: 🌐 ZUNRDP - FIREBASE EDITION
 
 on:
   workflow_dispatch:
     inputs:
       machine_name:
-        description: 'Chọn máy'
+        description: 'Chọn máy: Windows hoặc Ubuntu'
         required: true
         type: choice
         default: 'Windows'
-        options: [Windows, Ubuntu]
+        options:
+          - Windows
+          - Ubuntu
 
 jobs:
   setup-vm:
     runs-on: ${{ github.event.inputs.machine_name == 'Windows' && 'windows-latest' || 'ubuntu-latest' }}
     timeout-minutes: 360
     steps:
-      - name: Lấy code
+      - name: 1. LẤY MÃ NGUỒN
         uses: actions/checkout@v4
 
-      # --- PHẦN DÀNH CHO WINDOWS ---
-      - name: Cài và Kết nối Tailscale (Windows)
+      - name: 2. CÀI TAILSCALE & KẾT NỐI (WINDOWS)
         if: github.event.inputs.machine_name == 'Windows'
         shell: powershell
         env:
           TS_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          Write-Host "Dang cai Tailscale cho Windows..."
           $msi = "$env:TEMP\tailscale.msi"
           Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi
           Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 10
           $tsExe = "$env:ProgramFiles\Tailscale\Tailscale.exe"
-          & $tsExe up --authkey=$env:TS_KEY --hostname=ZUN-WINDOWS --accept-routes --reset
-          
-      - name: Cấu hình RDP & Chạy Script (Windows)
+          & $tsExe up --authkey=$env:TS_KEY --hostname=ZUN-WIN --accept-routes --reset
+
+      - name: 3. CẤU HÌNH RDP & CHẠY SCRIPT (WINDOWS)
         if: github.event.inputs.machine_name == 'Windows'
         shell: powershell
         run: |
@@ -43,8 +43,7 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           .\run_vm.ps1
 
-      # --- PHẦN DÀNH CHO UBUNTU ---
-      - name: Cài và Kết nối Tailscale (Ubuntu)
+      - name: 4. CÀI TAILSCALE & RDP (UBUNTU)
         if: github.event.inputs.machine_name == 'Ubuntu'
         shell: bash
         env:
@@ -52,22 +51,10 @@ jobs:
         run: |
           curl -fsSL https://tailscale.com/install.sh | sh
           sudo tailscale up --authkey=$TS_KEY --hostname=ZUN-UBUNTU --accept-routes --reset
-
-      - name: Cấu hình RDP & Dashboard (Ubuntu)
-        if: github.event.inputs.machine_name == 'Ubuntu'
-        shell: bash
-        run: |
           sudo apt-get update && sudo apt-get install -y xrdp
           sudo useradd -m -s /bin/bash adminzun || true
           echo "adminzun:ZunRDP@123456" | sudo chpasswd
           sudo usermod -aG sudo adminzun
-          VM_ID="ZUN-UB-$RANDOM"
-          while true; do
-            IP=$(tailscale ip -4)
-            curl -s -X POST "https://nodejs-1--rdp26082007.replit.app/api/update" -H "Content-Type: application/json" \
-            -d "{\"id\":\"$VM_ID\",\"os\":\"Ubuntu\",\"ip\":\"$IP\",\"user\":\"adminzun\",\"pass\":\"ZunRDP@123456\",\"status\":\"running\",\"uptime\":\"$(uptime -p)\"}"
-            CMD=$(curl -s "https://nodejs-1--rdp26082007.replit.app/api/command/$VM_ID")
-            [[ "$CMD" == *"kill"* ]] && exit 1
-            sleep 10
-          done
+          chmod +x ./run_ubuntu.sh
+          ./run_ubuntu.sh
 
