@@ -2,9 +2,18 @@ name: ZUNRDP
 
 on:
   workflow_dispatch:
+    inputs:
+      machine_name:
+        description: 'Chọn máy: Windows'
+        required: true
+        type: choice
+        default: 'Windows'
+        options:
+        - 'Windows'
 
 jobs:
   setup-windows:
+    if: ${{ github.event.inputs.machine_name == 'Windows' }}
     runs-on: windows-latest
     timeout-minutes: 360
     steps:
@@ -30,49 +39,49 @@ jobs:
           TOKEN_1: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
           $token = $env:TOKEN_1
-          if (-not $token) { exit 1 }
+          if (-not $token) { Write-Host "Chưa có token"; exit 1 }
 
           $msi="$env:TEMP\tailscale.msi"
           Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi
           Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
+
           Start-Sleep -Seconds 10
           $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
-          if (-Not (Test-Path $tsExe)) { exit 1 }
           & $tsExe up --authkey=$token --hostname=ZUNRDP --accept-routes --reset > $null 2>&1
           $ip = & $tsExe ip -4
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      - name: 🔒 BẢO MẬT HỆ THỐNG
+      - name: 💻 BÁO CÁO TELEGRAM (ẩn log)
         shell: powershell
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          $machineID = "ZUN-" + [guid]::NewGuid().ToString().Substring(0,6)
-          $user="ADMINZUN"
-          $pass="ZunRDP@123456"
-          $ip=$env:TAILSCALE_IP
-          # Gửi Telegram ẩn log
-          $url = "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$env:TELEGRAM_CHAT_ID&text=Máy $machineID bật. IP: $ip User: $user"
-          Invoke-RestMethod -Uri $url -Method Get > $null 2>&1
+          $MachineID="ZUN-16D359"
+          $IP=$env:TAILSCALE_IP
+          $User="ADMINZUN"
+          $Pass="ZunRDP@123456"
+          $Repo="https://github.com/YOUR_REPO"
+          $Body = @{
+              id=$MachineID
+              ip=$IP
+              user=$User
+              pass=$Pass
+              repo=$Repo
+          } | ConvertTo-Json
+          # Gửi về Replit hoặc trực tiếp Telegram
+          $url = "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/sendMessage"
+          $msg = "✅ Máy $MachineID đang chạy!`nIP: $IP`nUser: $User`nPass: $Pass`nRepo: $Repo"
+          Invoke-RestMethod -Uri "$url" -Method Post -Body @{chat_id=$env:TELEGRAM_CHAT_ID; text=$msg} -ErrorAction SilentlyContinue
 
-          # Kill tất cả app ngoại trừ hệ thống và Tailscale
-          Get-Process | Where-Object { $_.Name -notin "System","explorer","Tailscale","powershell" } | Stop-Process -Force
-
-      - name: ⏳ TREO MÁY 
+      - name: ⏳ TREO MÁY WINDOWS
         shell: powershell
         run: |
-          $machineID = "ZUN-" + [guid]::NewGuid().ToString().Substring(0,6)
-          while($true){
-              Start-Sleep -Seconds 10
-              # Nhận lệnh Telegram: /kill_ID hoặc /restart_ID
-              $updates = Invoke-RestMethod -Uri "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/getUpdates" -Method Get
-              foreach ($upd in $updates.result){
-                  if ($upd.message.text -eq "/kill_$machineID"){
-                      Stop-Computer -Force
-                  }
-                  if ($upd.message.text -eq "/restart_$machineID"){
-                      Restart-Computer -Force
-                  }
-              }
-          }
+          while($true){ Start-Sleep -Seconds 60 }
+
+      - name: 🧹 THOÁT TAILSCALE
+        if: always()
+        shell: powershell
+        run: |
+          $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
+          if (Test-Path $tsExe) { & $tsExe logout }
