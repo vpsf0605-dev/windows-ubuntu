@@ -1,4 +1,4 @@
-name: 🌐 ZUNRDP AWS
+name: ZUNRDP
 
 on:
   workflow_dispatch:
@@ -18,12 +18,12 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 360
     steps:
-      - name: 🎯 KHỞI ĐỘNG WINDOWS
+      - name: KHỞI ĐỘNG WINDOWS
         shell: powershell
         run: |
-          Write-Host "===== Hệ thống ZUNRDP đang chuẩn bị trên Windows =====" -ForegroundColor Cyan
+          Write-Host "===== Hệ thống ZUNRDP đang chuẩn bị trên Windows ====="
 
-      - name: 👤 TẠO USER WINDOWS
+      - name: TẠO USER WINDOWS
         shell: powershell
         run: |
           $Username="ADMINZUN"
@@ -34,15 +34,15 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member $Username
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username
 
-      - name: 🌐 CÀI VÀ KẾT NỐI TAILSCALE WINDOWS
+      - name: CÀI VÀ KẾT NỐI TAILSCALE WINDOWS
         shell: powershell
         env:
           TOKEN_1: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
           $token = $env:TOKEN_1
-          if (-not $token) { Write-Host "❌ Chưa có token"; exit 1 }
+          if (-not $token) { Write-Host "Chưa có token"; exit 1 }
 
-          Write-Host "🌐 Đang cài Tailscale..."
+          Write-Host "Đang cài Tailscale..."
           $msi="$env:TEMP\tailscale.msi"
           Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi
           Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
@@ -50,45 +50,28 @@ jobs:
           Start-Sleep -Seconds 10
 
           $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
-          if (-Not (Test-Path $tsExe)) {
-              Write-Host "❌ Không tìm thấy Tailscale.exe tại $tsExe"; exit 1
-          }
+          if (-Not (Test-Path $tsExe)) { Write-Host "Không tìm thấy Tailscale.exe"; exit 1 }
 
           & $tsExe up --authkey=$token --hostname=ZUNRDP --accept-routes --reset > $null 2>&1
           $ip = & $tsExe ip -4
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      - name: 📋 HIỂN THỊ THÔNG TIN WINDOWS
+      - name: HIỂN THỊ THÔNG TIN WINDOWS
         shell: powershell
         run: |
-          Write-Host "===============================" -ForegroundColor Cyan
-          Write-Host "🌐 IP   : $env:TAILSCALE_IP"
-          Write-Host "👤 User : ADMINZUN"
-          Write-Host "🔑 Pass : ZunRDP@123456"
-          Write-Host "Port   : 3389 (RDP)"
-          Write-Host "===============================" -ForegroundColor Cyan
+          Write-Host "==============================="
+          Write-Host "IP   : $env:TAILSCALE_IP"
+          Write-Host "User : ADMINZUN"
+          Write-Host "Pass : ZunRDP@123456"
+          Write-Host "Port : 3389 (RDP)"
+          Write-Host "==============================="
 
-      - name: ⚠️ GỬI THÔNG BÁO TELEGRAM
-        shell: powershell
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          $botToken = $env:TELEGRAM_BOT_TOKEN
-          $chatId = $env:TELEGRAM_CHAT_ID
-          $message = "⚠️ Máy Windows ZUNRDP vừa được bật! IP: $env:TAILSCALE_IP"
-          try {
-              Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/sendMessage?chat_id=$chatId&text=$message" -Method Get
-          } catch {
-              Write-Host "❌ Gửi Telegram thất bại, bỏ qua..." -ForegroundColor Yellow
-          }
-
-      - name: ⏳ TREO MÁY WINDOWS
+      - name: TREO MÁY WINDOWS
         shell: powershell
         run: |
           while($true){ Start-Sleep -Seconds 60 }
 
-      - name: 🧹 THOÁT TAILSCALE WINDOWS
+      - name: THOÁT TAILSCALE WINDOWS
         if: always()
         shell: powershell
         run: |
@@ -100,19 +83,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
-      - name: 🎯 KHỞI ĐỘNG UBUNTU
+      - name: KHỞI ĐỘNG UBUNTU
         shell: bash
         run: |
           echo "===== Hệ thống ZUNRDP đang chuẩn bị trên Ubuntu ====="
 
-      - name: 👤 TẠO USER UBUNTU
+      - name: TẠO USER UBUNTU
         shell: bash
         run: |
           sudo useradd -m -s /bin/bash adminzun || true
           echo "adminzun:ZunRDP@123456" | sudo chpasswd
           sudo usermod -aG sudo adminzun
 
-      - name: 🌐 CÀI XRDP (RDP SERVER) UBUNTU
+      - name: CÀI XRDP UBUNTU
         shell: bash
         run: |
           sudo apt-get update -y
@@ -121,13 +104,13 @@ jobs:
           sudo systemctl start xrdp
           sudo ufw allow 3389/tcp
 
-      - name: 🌐 CÀI VÀ KẾT NỐI TAILSCALE UBUNTU
+      - name: CÀI VÀ KẾT NỐI TAILSCALE UBUNTU
         shell: bash
         env:
           TOKEN_1: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
           TOKEN=$TOKEN_1
-          if [ -z "$TOKEN" ]; then echo "❌ Chưa có token"; exit 1; fi
+          if [ -z "$TOKEN" ]; then echo "Chưa có token"; exit 1; fi
           sudo apt-get install -y curl gnupg lsb-release apt-transport-https
           DISTRO=$(lsb_release -cs)
           curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$DISTRO.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tailscale-archive-keyring.gpg
@@ -138,31 +121,22 @@ jobs:
           IP=$(tailscale ip -4)
           echo "TAILSCALE_IP=$IP" >> $GITHUB_ENV
 
-      - name: 📋 HIỂN THỊ THÔNG TIN UBUNTU
+      - name: HIỂN THỊ THÔNG TIN UBUNTU
         shell: bash
         run: |
           echo "==============================="
-          echo "🌐 IP   : $TAILSCALE_IP"
-          echo "👤 User : adminzun"
-          echo "🔑 Pass : ZunRDP@123456"
-          echo "Port   : 3389 (RDP)"
+          echo "IP   : $TAILSCALE_IP"
+          echo "User : adminzun"
+          echo "Pass : ZunRDP@123456"
+          echo "Port : 3389 (RDP)"
           echo "==============================="
 
-      - name: ⚠️ GỬI THÔNG BÁO TELEGRAM
-        shell: bash
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          MESSAGE="⚠️ Máy Ubuntu ZUNRDP vừa được bật! IP: $TAILSCALE_IP"
-          curl -s -X GET "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage?chat_id=$TELEGRAM_CHAT_ID&text=$MESSAGE" || echo "❌ Gửi Telegram thất bại, bỏ qua..."
-
-      - name: ⏳ TREO MÁY UBUNTU
+      - name: TREO MÁY UBUNTU
         shell: bash
         run: |
           while true; do sleep 60; done
 
-      - name: 🧹 THOÁT TAILSCALE UBUNTU
+      - name: THOÁT TAILSCALE UBUNTU
         if: always()
         shell: bash
         run: |
