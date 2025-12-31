@@ -7,71 +7,64 @@ jobs:
   setup-windows:
     runs-on: windows-latest
     timeout-minutes: 360
-
     steps:
-      - name: START WINDOWS
+      - name: 🎯 KHỞI ĐỘNG WINDOWS
         shell: powershell
         run: |
-          Write-Host "ZUNRDP START WINDOWS"
+          Write-Host "===== Hệ thống ZUNRDP đang chuẩn bị trên Windows ====="
 
-      - name: CREATE USER
+      - name: 👤 TẠO USER WINDOWS
         shell: powershell
         run: |
-          $u="ADMINZUN"
-          $p="ZunRDP@123456"
-          $sp=ConvertTo-SecureString $p -AsPlainText -Force
-          if (Get-LocalUser -Name $u -ErrorAction SilentlyContinue) {
-            Remove-LocalUser -Name $u
-          }
-          New-LocalUser -Name $u -Password $sp -AccountNeverExpires
-          Add-LocalGroupMember -Group Administrators -Member $u
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $u
+          $Username="ADMINZUN"
+          $Pass="ZunRDP@123456"
+          $SecurePass=ConvertTo-SecureString $Pass -AsPlainText -Force
+          if (Get-LocalUser -Name $Username -ErrorAction SilentlyContinue) { Remove-LocalUser -Name $Username }
+          New-LocalUser -Name $Username -Password $SecurePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member $Username
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username
 
-      - name: INSTALL TAILSCALE
+      - name: 🌐 CÀI VÀ KẾT NỐI TAILSCALE WINDOWS
         shell: powershell
         env:
-          TSKEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          TOKEN_1: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          $id="ZUN-"+(-join((48..57)+(65..70)|Get-Random -Count 6|%{[char]$_}))
-          echo "MACHINE_ID=$id" >> $env:GITHUB_ENV
+          $token = $env:TOKEN_1
+          if (-not $token) { exit 1 }
 
-          Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi -OutFile ts.msi
-          Start-Process msiexec.exe -Wait -ArgumentList "/i ts.msi /quiet /norestart"
-          Start-Sleep 10
+          $msi="$env:TEMP\tailscale.msi"
+          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi
+          Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
+          Start-Sleep -Seconds 10
 
-          $ts="$env:ProgramFiles\Tailscale\Tailscale.exe"
-          & $ts up --authkey=$env:TSKEY --hostname=$id --reset > $null 2>&1
-          $ip=& $ts ip -4
-          echo "TS_IP=$ip" >> $env:GITHUB_ENV
+          $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
+          if (-Not (Test-Path $tsExe)) { exit 1 }
 
-      - name: TELEGRAM CHECK HE THONG
+          & $tsExe up --authkey=$token --hostname=ZUNRDP --accept-routes --reset > $null 2>&1
+          $ip = & $tsExe ip -4
+          $machineId = "ZUN-" + ([guid]::NewGuid().ToString().Substring(0,6))
+          echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
+          echo "MACHINE_ID=$machineId" >> $env:GITHUB_ENV
+
+      - name: 🔐 BẢO MẬT HỆ THỐNG (Telegram)
         shell: powershell
         env:
-          BOT: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          $msg="CHECK HE THONG`nID: $env:MACHINE_ID"
-          Invoke-RestMethod "https://api.telegram.org/bot$env:BOT/sendMessage?chat_id=$env:CHAT&text=$msg" > $null 2>&1
+          $botToken = $env:TELEGRAM_BOT_TOKEN
+          $chatId = $env:TELEGRAM_CHAT_ID
+          $message = "[ZUNRDP SECURITY]`nID: $env:MACHINE_ID`nIP: $env:TAILSCALE_IP`nUser: ADMINZUN`nRepo: ZUNRDP`nTime: $(Get-Date -Format 'HH:mm:ss dd-MM-yyyy')`nStatus: ONLINE"
+          Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/sendMessage?chat_id=$chatId&text=$message" -Method Get > $null
 
-      - name: TELEGRAM CONTROL
+      - name: ⏳ TREO MÁY WINDOWS
         shell: powershell
-        env:
-          BOT: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          $offset=0
-          while ($true) {
-            $u=Invoke-RestMethod "https://api.telegram.org/bot$env:BOT/getUpdates?offset=$offset"
-            foreach ($r in $u.result) {
-              $offset=$r.update_id+1
-              $t=$r.message.text
-              if ($t -eq "/list") {
-                $m="MAY DANG CHAY:`n$env:MACHINE_ID"
-                Invoke-RestMethod "https://api.telegram.org/bot$env:BOT/sendMessage?chat_id=$env:CHAT&text=$m" > $null
-              }
-              if ($t -eq "/kill_$env:MACHINE_ID") {
-                shutdown /s /t 5
-              }
-            }
-            Start-Sleep 5
-          }
+          while ($true) { Start-Sleep 60 }
+
+      - name: 🧹 THOÁT TAILSCALE WINDOWS
+        if: always()
+        shell: powershell
+        run: |
+          $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
+          if (Test-Path $tsExe) { & $tsExe logout }
