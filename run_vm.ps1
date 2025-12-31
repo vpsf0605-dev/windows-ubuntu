@@ -1,14 +1,17 @@
 # ========================================================
-# ZUNRDP - FIREBASE AGENT (FIXED CONNECT)
+# ZUNRDP - FIREBASE AGENT (FIXED COMMAND NOT FOUND)
 # ========================================================
 
-# 1. Ép buộc sử dụng giao thức bảo mật cao nhất để tránh lỗi Retrying
+# 1. Ép buộc sử dụng giao thức bảo mật TLS 1.2
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# 2. Cấu hình (Đảm bảo KHÔNG có dấu / ở cuối link)
+# 2. Cấu hình Firebase
 $baseUrl = "https://zunrdp-default-rtdb.asia-southeast1.firebasedatabase.app"
 $vmID = "ZUN-WIN-" + (Get-Random -Minimum 1000 -Maximum 9999)
 $startTime = [DateTimeOffset]::Now.ToUnixTimeMilliseconds()
+
+# 3. Xác định đường dẫn Tailscale.exe (Sửa lỗi 'not recognized')
+$tsExe = "$env:ProgramFiles\Tailscale\Tailscale.exe"
 
 Write-Host "------------------------------------------" -ForegroundColor Cyan
 Write-Host ">>> DANG KET NOI FIREBASE: $vmID" -ForegroundColor Cyan
@@ -16,9 +19,12 @@ Write-Host "------------------------------------------" -ForegroundColor Cyan
 
 while($true) {
     try {
-        # Lấy IP từ Tailscale
-        $ip = (tailscale ip -4).Trim()
-        if (!$ip) { $ip = "Chờ Tailscale..." }
+        # Lấy IP bằng đường dẫn tuyệt đối
+        if (Test-Path $tsExe) {
+            $ip = (& $tsExe ip -4).Trim()
+        } else {
+            $ip = "Chưa cài Tailscale"
+        }
 
         # Chuẩn bị dữ liệu JSON
         $payload = @{
@@ -32,7 +38,7 @@ while($true) {
             lastSeen  = [DateTimeOffset]::Now.ToUnixTimeMilliseconds()
         } | ConvertTo-Json -Compress
 
-        # Gửi dữ liệu lên Firebase (Dùng PUT để tạo/cập nhật)
+        # Gửi dữ liệu lên Firebase
         $url = "$baseUrl/vms/$vmID.json"
         Invoke-RestMethod -Uri $url -Method Put -Body $payload -ContentType "application/json" -TimeoutSec 10
 
@@ -41,18 +47,15 @@ while($true) {
         $cmd = Invoke-RestMethod -Uri $cmdUrl -Method Get
         
         if ($cmd -eq "kill") {
-            Write-Host "!!! NHAN LENH STOP TU DASHBOARD !!!" -ForegroundColor Red
-            # Xóa lệnh sau khi nhận
+            Write-Host "!!! NHAN LENH STOP !!!" -ForegroundColor Red
             Invoke-RestMethod -Uri $cmdUrl -Method Delete
             exit 1
         }
     }
     catch {
-        # Hiện lỗi chi tiết để debug thay vì chỉ hiện Retrying
         Write-Host "Loi: $($_.Exception.Message)" -ForegroundColor Gray
     }
 
-    # Gửi tin hiệu mỗi 10 giây
     Start-Sleep -Seconds 10
 }
 
