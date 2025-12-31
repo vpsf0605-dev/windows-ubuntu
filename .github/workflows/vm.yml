@@ -33,7 +33,22 @@ jobs:
           $tsExe = "$env:ProgramFiles\Tailscale\Tailscale.exe"
           & $tsExe up --authkey=$env:TS_KEY --hostname=ZUN-WIN --accept-routes --reset
 
-      - name: 3. CẤU HÌNH RDP & CHẠY SCRIPT (WINDOWS)
+      - name: 3. HIỂN THỊ THÔNG TIN KẾT NỐI (WINDOWS)
+        if: github.event.inputs.machine_name == 'Windows'
+        shell: powershell
+        run: |
+          $tsExe = "$env:ProgramFiles\Tailscale\Tailscale.exe"
+          $ip = (& $tsExe ip -4).Trim()
+          Write-Host "==========================================" -ForegroundColor Green
+          Write-Host "   THÔNG TIN KẾT NỐI RDP (WINDOWS)        " -ForegroundColor Cyan
+          Write-Host "==========================================" -ForegroundColor Green
+          Write-Host " IP TAILSCALE : $ip" -ForegroundColor Yellow
+          Write-Host " USERNAME     : ADMINZUN" -ForegroundColor Yellow
+          Write-Host " PASSWORD     : ZunRDP@123456" -ForegroundColor Yellow
+          Write-Host "==========================================" -ForegroundColor Green
+          Write-Host "Vui lòng dùng App Remote Desktop để kết nối."
+
+      - name: 4. CẤU HÌNH RDP & CHẠY SCRIPT (WINDOWS)
         if: github.event.inputs.machine_name == 'Windows'
         shell: powershell
         run: |
@@ -43,7 +58,7 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           .\run_vm.ps1
 
-      - name: 4. CÀI TAILSCALE & RDP (UBUNTU)
+      - name: 5. CÀI TAILSCALE & RDP (UBUNTU)
         if: github.event.inputs.machine_name == 'Ubuntu'
         shell: bash
         env:
@@ -55,6 +70,16 @@ jobs:
           sudo useradd -m -s /bin/bash adminzun || true
           echo "adminzun:ZunRDP@123456" | sudo chpasswd
           sudo usermod -aG sudo adminzun
+          
+          IP=$(tailscale ip -4 | head -n 1)
+          echo "=========================================="
+          echo "   THÔNG TIN KẾT NỐI RDP (UBUNTU)         "
+          echo "=========================================="
+          echo " IP TAILSCALE : $IP"
+          echo " USERNAME     : adminzun"
+          echo " PASSWORD     : ZunRDP@123456"
+          echo "=========================================="
+          
           chmod +x ./run_ubuntu.sh
           ./run_ubuntu.sh
-
+          
