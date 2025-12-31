@@ -18,12 +18,22 @@ jobs:
       - name: Lấy code
         uses: actions/checkout@v4
 
-      - name: Kết nối Tailscale
-        uses: tailscale/github-action@v2
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
-
-      - name: Cấu hình Windows (Nếu chọn Windows)
+      # --- PHẦN DÀNH CHO WINDOWS ---
+      - name: Cài và Kết nối Tailscale (Windows)
+        if: github.event.inputs.machine_name == 'Windows'
+        shell: powershell
+        env:
+          TS_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          Write-Host "Dang cai Tailscale cho Windows..."
+          $msi = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi
+          Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
+          Start-Sleep -Seconds 5
+          $tsExe = "$env:ProgramFiles\Tailscale\Tailscale.exe"
+          & $tsExe up --authkey=$env:TS_KEY --hostname=ZUN-WINDOWS --accept-routes --reset
+          
+      - name: Cấu hình RDP & Chạy Script (Windows)
         if: github.event.inputs.machine_name == 'Windows'
         shell: powershell
         run: |
@@ -33,7 +43,17 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           .\run_vm.ps1
 
-      - name: Cấu hình Ubuntu (Nếu chọn Ubuntu)
+      # --- PHẦN DÀNH CHO UBUNTU ---
+      - name: Cài và Kết nối Tailscale (Ubuntu)
+        if: github.event.inputs.machine_name == 'Ubuntu'
+        shell: bash
+        env:
+          TS_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --authkey=$TS_KEY --hostname=ZUN-UBUNTU --accept-routes --reset
+
+      - name: Cấu hình RDP & Dashboard (Ubuntu)
         if: github.event.inputs.machine_name == 'Ubuntu'
         shell: bash
         run: |
@@ -41,7 +61,6 @@ jobs:
           sudo useradd -m -s /bin/bash adminzun || true
           echo "adminzun:ZunRDP@123456" | sudo chpasswd
           sudo usermod -aG sudo adminzun
-          
           VM_ID="ZUN-UB-$RANDOM"
           while true; do
             IP=$(tailscale ip -4)
