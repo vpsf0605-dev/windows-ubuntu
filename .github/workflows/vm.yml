@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       machine_name:
-        description: 'Chọn máy: Windows hoặc Ubuntu'
+        description: 'Chon may: Windows hoac Ubuntu'
         required: true
         type: choice
         default: 'Windows'
@@ -17,10 +17,10 @@ jobs:
     runs-on: ${{ github.event.inputs.machine_name == 'Windows' && 'windows-latest' || 'ubuntu-latest' }}
     timeout-minutes: 360
     steps:
-      - name: 1. LẤY MÃ NGUỒN
+      - name: 1. LAY MA NGUON
         uses: actions/checkout@v4
 
-      - name: 2. CÀI TAILSCALE & KẾT NỐI (WINDOWS)
+      - name: 2. CAI TAILSCALE (WINDOWS)
         if: github.event.inputs.machine_name == 'Windows'
         shell: powershell
         env:
@@ -33,22 +33,22 @@ jobs:
           $tsExe = "$env:ProgramFiles\Tailscale\Tailscale.exe"
           & $tsExe up --authkey=$env:TS_KEY --hostname=ZUN-WIN --accept-routes --reset
 
-      - name: 3. HIỂN THỊ THÔNG TIN KẾT NỐI (WINDOWS)
+      - name: 3. THONG TIN KET NOI (WINDOWS)
         if: github.event.inputs.machine_name == 'Windows'
         shell: powershell
         run: |
           $tsExe = "$env:ProgramFiles\Tailscale\Tailscale.exe"
           $ip = (& $tsExe ip -4).Trim()
           Write-Host "==========================================" -ForegroundColor Green
-          Write-Host "   THÔNG TIN KẾT NỐI RDP (WINDOWS)        " -ForegroundColor Cyan
+          Write-Host "   THONG TIN KET NOI RDP (WINDOWS)        " -ForegroundColor Cyan
           Write-Host "==========================================" -ForegroundColor Green
           Write-Host " IP TAILSCALE : $ip" -ForegroundColor Yellow
           Write-Host " USERNAME     : ADMINZUN" -ForegroundColor Yellow
           Write-Host " PASSWORD     : ZunRDP@123456" -ForegroundColor Yellow
           Write-Host "==========================================" -ForegroundColor Green
-          Write-Host "Vui lòng dùng App Remote Desktop để kết nối."
+          Write-Host "Dung App Remote Desktop de ket noi."
 
-      - name: 4. CẤU HÌNH RDP & CHẠY SCRIPT (WINDOWS)
+      - name: 4. CAU HINH RDP & CHAY SCRIPT (WINDOWS)
         if: github.event.inputs.machine_name == 'Windows'
         shell: powershell
         run: |
@@ -58,7 +58,7 @@ jobs:
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
           .\run_vm.ps1
 
-      - name: 5. CÀI TAILSCALE & RDP (UBUNTU)
+      - name: 5. CAI TAILSCALE & RDP (UBUNTU)
         if: github.event.inputs.machine_name == 'Ubuntu'
         shell: bash
         env:
@@ -73,7 +73,7 @@ jobs:
           
           IP=$(tailscale ip -4 | head -n 1)
           echo "=========================================="
-          echo "   THÔNG TIN KẾT NỐI RDP (UBUNTU)         "
+          echo "   THONG TIN KET NOI RDP (UBUNTU)         "
           echo "=========================================="
           echo " IP TAILSCALE : $IP"
           echo " USERNAME     : adminzun"
