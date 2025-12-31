@@ -1,4 +1,4 @@
-name: 🌐 ZUNRDP - FIREBASE EDITION
+name: 🌐 ZUNRDP Cloud
 
 on:
   workflow_dispatch:
