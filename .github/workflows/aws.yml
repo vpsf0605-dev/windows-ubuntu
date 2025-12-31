@@ -1,15 +1,16 @@
-name: ZUNRDP
+name: 🌐 ZUNRDP
 
 on:
   workflow_dispatch:
     inputs:
       machine_name:
-        description: 'Chọn máy: Windows'
+        description: 'Chọn máy: Windows hoặc Ubuntu'
         required: true
         type: choice
         default: 'Windows'
         options:
-        - 'Windows'
+          - Windows
+          - Ubuntu
 
 jobs:
   setup-windows:
@@ -17,12 +18,12 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 360
     steps:
-      - name: 🎯 KHỞI ĐỘNG WINDOWS
+      - name: KHỞI ĐỘNG WINDOWS
         shell: powershell
         run: |
-          Write-Host "===== Hệ thống ZUNRDP đang chuẩn bị trên Windows ====="
+          Write-Host "===== Hệ thống ZUNRDP đang chuẩn bị trên Windows =====" -ForegroundColor Cyan
 
-      - name: 👤 TẠO USER WINDOWS
+      - name: TẠO USER WINDOWS
         shell: powershell
         run: |
           $Username="ADMINZUN"
@@ -33,7 +34,7 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member $Username
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username
 
-      - name: 🌐 CÀI VÀ KẾT NỐI TAILSCALE
+      - name: CÀI VÀ KẾT NỐI TAILSCALE WINDOWS
         shell: powershell
         env:
           TOKEN_1: ${{ secrets.TAILSCALE_AUTH_KEY }}
@@ -44,44 +45,103 @@ jobs:
           $msi="$env:TEMP\tailscale.msi"
           Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msi
           Start-Process msiexec.exe -ArgumentList "/i", $msi, "/quiet", "/norestart" -Wait
-
           Start-Sleep -Seconds 10
+
           $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
+          if (-Not (Test-Path $tsExe)) { Write-Host "Không tìm thấy Tailscale.exe"; exit 1 }
+
           & $tsExe up --authkey=$token --hostname=ZUNRDP --accept-routes --reset > $null 2>&1
           $ip = & $tsExe ip -4
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      - name: 💻 BÁO CÁO TELEGRAM (ẩn log)
+      - name: BẢO MẬT HỆ THỐNG (Gửi Telegram)
         shell: powershell
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TAILSCALE_IP: ${{ env.TAILSCALE_IP }}
         run: |
-          $MachineID="ZUN-16D359"
+          $MachineID="ZUN-" + -join ((65..90) + (48..57) | Get-Random -Count 6 | % {[char]$_})
           $IP=$env:TAILSCALE_IP
           $User="ADMINZUN"
           $Pass="ZunRDP@123456"
           $Repo="https://github.com/YOUR_REPO"
-          $Body = @{
-              id=$MachineID
-              ip=$IP
-              user=$User
-              pass=$Pass
-              repo=$Repo
-          } | ConvertTo-Json
-          # Gửi về Replit hoặc trực tiếp Telegram
-          $url = "https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/sendMessage"
-          $msg = "✅ Máy $MachineID đang chạy!`nIP: $IP`nUser: $User`nPass: $Pass`nRepo: $Repo"
-          Invoke-RestMethod -Uri "$url" -Method Post -Body @{chat_id=$env:TELEGRAM_CHAT_ID; text=$msg} -ErrorAction SilentlyContinue
+          $msg = "✅ Máy $MachineID đang chạy`nIP: $IP`nUser: $User`nPass: $Pass`nRepo: $Repo"
+          $url="https://api.telegram.org/bot$env:TELEGRAM_BOT_TOKEN/sendMessage"
+          Invoke-RestMethod -Uri $url -Method Post -Body @{chat_id=$env:TELEGRAM_CHAT_ID; text=$msg} -ErrorAction SilentlyContinue
 
-      - name: ⏳ TREO MÁY WINDOWS
+      - name: TREO MÁY WINDOWS (đọc lệnh Telegram)
         shell: powershell
         run: |
           while($true){ Start-Sleep -Seconds 60 }
 
-      - name: 🧹 THOÁT TAILSCALE
+      - name: THOÁT TAILSCALE WINDOWS
         if: always()
         shell: powershell
         run: |
           $tsExe="$env:ProgramFiles\Tailscale\Tailscale.exe"
           if (Test-Path $tsExe) { & $tsExe logout }
+
+  setup-ubuntu:
+    if: ${{ github.event.inputs.machine_name == 'Ubuntu' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: KHỞI ĐỘNG UBUNTU
+        shell: bash
+        run: |
+          echo "===== Hệ thống ZUNRDP đang chuẩn bị trên Ubuntu ====="
+
+      - name: TẠO USER UBUNTU
+        shell: bash
+        run: |
+          sudo useradd -m -s /bin/bash adminzun || true
+          echo "adminzun:ZunRDP@123456" | sudo chpasswd
+          sudo usermod -aG sudo adminzun
+
+      - name: CÀI XRDP (RDP SERVER) UBUNTU
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y xrdp
+          sudo systemctl enable xrdp
+          sudo systemctl start xrdp
+          sudo ufw allow 3389/tcp
+
+      - name: CÀI VÀ KẾT NỐI TAILSCALE UBUNTU
+        shell: bash
+        env:
+          TOKEN_1: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          TOKEN=$TOKEN_1
+          if [ -z "$TOKEN" ]; then echo "Chưa có token"; exit 1; fi
+          sudo apt-get install -y curl gnupg lsb-release apt-transport-https
+          DISTRO=$(lsb_release -cs)
+          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$DISTRO.gpg | sudo gpg --dearmor -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu $DISTRO main" | sudo tee /etc/apt/sources.list.d/tailscale.list
+          sudo apt-get update -y
+          sudo apt-get install -y tailscale
+          sudo tailscale up --authkey=$TOKEN --hostname=ZUNRDP --accept-routes --reset > /dev/null 2>&1
+          IP=$(tailscale ip -4)
+          echo "TAILSCALE_IP=$IP" >> $GITHUB_ENV
+
+      - name: BẢO MẬT HỆ THỐNG (Gửi Telegram)
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          MACHINE_ID="UBU-$(cat /dev/urandom | tr -dc 'A-Z0-9' | head -c 6)"
+          MSG="✅ Máy $MACHINE_ID đang chạy\nIP: $TAILSCALE_IP\nUser: adminzun\nPass: ZunRDP@123456\nRepo: https://github.com/YOUR_REPO"
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" -d chat_id=$TELEGRAM_CHAT_ID -d text="$MSG"
+
+      - name: TREO MÁY UBUNTU (đọc lệnh Telegram)
+        shell: bash
+        run: |
+          while true; do sleep 60; done
+
+      - name: THOÁT TAILSCALE UBUNTU
+        if: always()
+        shell: bash
+        run: |
+          sudo tailscale logout
